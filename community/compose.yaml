@@ -1,0 +1,239 @@
+services:
+
+  postgres:
+    image: postgres:${POSTGRES_TAG}
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: alfresco
+      POSTGRES_DB: alfresco
+      PGUSER: alfresco
+    command: postgres -c max_connections=300 -c log_min_messages=LOG
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1g
+        reservations:
+          cpus: '0.5'
+          memory: 512m
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  activemq:
+    image: docker.io/alfresco/alfresco-activemq:${ACTIVEMQ_TAG}
+    environment:
+      ACTIVEMQ_ADMIN_LOGIN: admin
+      ACTIVEMQ_ADMIN_PASSWORD: ${ACTIVEMQ_ADMIN_PASSWORD}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "--user", "admin:${ACTIVEMQ_ADMIN_PASSWORD}", "http://localhost:8161/admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1g
+        reservations:
+          cpus: '0.5'
+          memory: 512m
+    volumes:
+      - activemq-data:/opt/activemq/data
+
+  transform-core-aio:
+    image: docker.io/alfresco/alfresco-transform-core-aio:${TRANSFORM_TAG}
+    environment:
+      ACTIVEMQ_URL: nio://activemq:61616
+      ACTIVEMQ_USER: admin
+      ACTIVEMQ_PASSWORD: ${ACTIVEMQ_ADMIN_PASSWORD}
+      JAVA_OPTS: >-
+        -Dserver.tomcat.threads.min=4        
+        -Dserver.tomcat.threads.max=12
+        -XX:MinRAMPercentage=50
+        -XX:MaxRAMPercentage=80
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2g
+        reservations:
+          cpus: '1'
+          memory: 1g
+    depends_on: 
+      activemq:
+        condition: service_healthy
+
+  alfresco:
+    image: docker.io/alfresco/alfresco-content-repository-community:${REPO_TAG}
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Dencryption.keystore.type=JCEKS
+        -Dencryption.cipherAlgorithm=DESede/CBC/PKCS5Padding
+        -Dencryption.keyAlgorithm=DESede
+        -Dencryption.keystore.location=/usr/local/tomcat/shared/classes/alfresco/extension/keystore/keystore
+        -Dmetadata-keystore.password=${METADATA_KEYSTORE_PASSWORD}
+        -Dmetadata-keystore.aliases=metadata
+        -Dmetadata-keystore.metadata.password=${METADATA_KEYSTORE_METADATA_PASSWORD}
+        -Dmetadata-keystore.metadata.algorithm=DESede
+      JAVA_OPTS: >-
+        -Ddb.driver=org.postgresql.Driver
+        -Ddb.url=jdbc:postgresql://postgres:5432/alfresco
+        -Dsolr.host=solr6
+        -Dsolr.secureComms=secret
+        -Dsolr.sharedSecret=${SECURE_COMMS_SECRET}
+        -Dindex.subsystem.name=solr6
+        -Dcsrf.filter.enabled=false
+        -Dmessaging.broker.url="failover:(nio://activemq:61616)?timeout=3000&jms.useCompression=true"
+        -DlocalTransform.core-aio.url=http://transform-core-aio:8090/
+        -Ddeployment.method=DOCKER_COMPOSE
+        -XX:MinRAMPercentage=50
+        -XX:MaxRAMPercentage=80
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/alfresco/api/-default-/public/alfresco/versions/1/probes/-ready-"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 1m
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 3gb
+        reservations:
+          cpus: '1'
+          memory: 2gb
+    depends_on: 
+      postgres:
+        condition: service_healthy
+      activemq:
+        condition: service_healthy
+      transform-core-aio:
+        condition: service_healthy
+    volumes:
+      - alf-repo-data:/usr/local/tomcat/alf_data
+
+  solr6:
+    image: docker.io/alfresco/alfresco-search-services:${SEARCH_TAG}
+    environment:
+      SOLR_ALFRESCO_HOST: "alfresco"
+      SOLR_ALFRESCO_PORT: "8080"
+      SOLR_SOLR_HOST: "solr6"
+      SOLR_SOLR_PORT: "8983"
+      SOLR_CREATE_ALFRESCO_DEFAULTS: "alfresco"
+      ALFRESCO_SECURE_COMMS: "secret"
+      JAVA_TOOL_OPTIONS: >-
+        -Dalfresco.secureComms.secret=${SECURE_COMMS_SECRET}
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1g
+        reservations:
+          cpus: '0.5'
+          memory: 512m
+    depends_on:
+      alfresco:
+        condition: service_healthy
+    volumes:
+      - solr-data:/opt/alfresco-search-services/data
+
+  share:
+    image: docker.io/alfresco/alfresco-share:${SHARE_TAG}
+    environment:
+      REPO_HOST: "alfresco"
+      REPO_PORT: "8080"
+      JAVA_OPTS: >-
+        -XX:MinRAMPercentage=50
+        -XX:MaxRAMPercentage=80
+        -Dalfresco.host=localhost
+        -Dalfresco.port=8080
+        -Dalfresco.context=alfresco
+        -Dalfresco.protocol=http
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1g
+        reservations:
+          cpus: '0.5'
+          memory: 512m
+    depends_on: 
+      alfresco:
+        condition: service_healthy
+
+  content-app:
+    image: docker.io/alfresco/alfresco-content-app:${CONTENT_APP_TAG}
+    environment:
+      APP_BASE_SHARE_URL: "http://localhost:8080/aca/#/preview/s"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+        reservations:
+          cpus: '0.25'
+          memory: 256m
+    depends_on: 
+      alfresco:
+        condition: service_healthy
+
+  control-center:
+    image: quay.io/alfresco/alfresco-control-center:${CONTROL_CENTER_TAG}
+    environment:
+      APP_CONFIG_PROVIDER: "ECM"
+      APP_CONFIG_AUTH_TYPE: "BASIC"
+      BASE_PATH: ./
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+        reservations:
+          cpus: '0.25'
+          memory: 256m
+    depends_on: 
+      alfresco:
+        condition: service_healthy
+
+  proxy:
+    image: docker.io/alfresco/alfresco-acs-nginx:${NGINX_TAG}
+    environment:
+      DISABLE_PROMETHEUS: "true"
+      DISABLE_SYNCSERVICE: "true"
+      DISABLE_ADW: "true"
+      ENABLE_CONTENT_APP: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512m
+        reservations:
+          cpus: '0.25'
+          memory: 256m
+    depends_on:
+      share:
+        condition: service_started
+      content-app:
+        condition: service_started
+      control-center:
+        condition: service_started
+      alfresco:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+volumes:
+  activemq-data:
+  postgres-data:
+  alf-repo-data:
+  solr-data:

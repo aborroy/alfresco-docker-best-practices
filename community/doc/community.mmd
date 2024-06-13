@@ -1,0 +1,41 @@
+graph TD;
+
+    subgraph Services
+        postgres(Postgres)
+        activemq(ActiveMQ)
+        transform_core_aio(Transform Core AIO)
+        alfresco(Alfresco)
+        solr6(Solr)
+        share(Share)
+        content_app(Content App)
+        control_center(Control Center)
+        proxy(Proxy)
+    end
+
+    subgraph Volumes
+        postgres_data[Postgres Data]
+        activemq_data[ActiveMQ Data]
+        alf_repo_data[Alfresco Data]
+        solr_data[Solr Data]
+    end
+
+    postgres --> postgres_data
+    activemq --> activemq_data
+    alfresco --> alf_repo_data
+    solr6 --> solr_data
+
+    proxy --> alfresco
+    proxy --> share
+    proxy --> content_app
+    proxy --> control_center
+
+    transform_core_aio --> activemq
+
+    share --> alfresco
+    content_app --> alfresco
+    control_center --> alfresco
+
+    alfresco --> postgres
+    alfresco --> activemq
+    alfresco --> solr6
+    alfresco --> transform_core_aio

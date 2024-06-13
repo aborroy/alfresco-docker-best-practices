@@ -1,0 +1,70 @@
+graph TD;
+    subgraph Services
+        postgres(Postgres)
+        activemq(ActiveMQ)
+        elasticsearch(Elasticsearch)
+        shared_file_store(Shared File Store)
+        transform_core_aio(Transform Core AIO)
+        transform_router(Transform Router)
+        alfresco(Alfresco)
+        search_reindexing(Search Reindexing)
+        search(Search)
+        sync_service(Sync Service)
+        share(Share)
+        digital_workspace(Digital Workspace)
+        control_center(Control Center)
+        proxy(Proxy)
+    end
+
+    subgraph Volumes
+        postgres_data[Postgres Data]
+        activemq_data[ActiveMQ Data]
+        shared_file_store_data[Shared File Store Data]
+        es_data[Elasticsearch Data]
+        alf_repo_data[Alfresco Repo Data]
+    end
+
+    proxy --> share
+    proxy --> digital_workspace
+    proxy --> control_center
+    proxy --> sync_service
+
+    share --> alfresco
+
+    digital_workspace --> alfresco
+
+    control_center --> alfresco
+
+    alfresco --> postgres
+    alfresco --> activemq
+    alfresco --> transform_router
+    alfresco --> elasticsearch
+
+    sync_service --> postgres
+    sync_service --> activemq
+    sync_service --> alfresco
+
+    search --> search_reindexing
+    search --> elasticsearch
+    search --> activemq
+
+    search_reindexing --> postgres
+    search_reindexing --> elasticsearch
+    search_reindexing --> transform_router
+    search_reindexing --> alfresco
+
+    transform_router --> activemq
+    transform_router --> transform_core_aio
+
+    transform_core_aio --> activemq
+    transform_core_aio --> shared_file_store
+
+    shared_file_store --> shared_file_store_data
+
+    elasticsearch --> es_data
+
+    activemq --> activemq_data
+
+    postgres --> postgres_data
+
+    alfresco --> alf_repo_data
