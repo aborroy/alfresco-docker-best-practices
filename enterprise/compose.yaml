@@ -187,6 +187,7 @@ services:
         -Dtransform.service.url=http://transform-router:8095
         -Dsfs.url=http://shared-file-store:8099/
         -DlocalTransform.core-aio.url=http://transform-core-aio:8090/
+        -Ddsync.service.uris=http://localhost:9090/alfresco
         -Ddeployment.method=DOCKER_COMPOSE
         -XX:MinRAMPercentage=50
         -XX:MaxRAMPercentage=80
@@ -302,6 +303,8 @@ services:
         condition: service_healthy
       alfresco:
         condition: service_healthy        
+    ports:
+      - "9090:9090"
 
   share:
     image: docker.io/alfresco/alfresco-share:${SHARE_TAG}
